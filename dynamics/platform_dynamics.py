@@ -26,8 +26,9 @@ I_PLAT_INV = np.diag([1/PLATFORM_IXX, 1/PLATFORM_IYY, 1/PLATFORM_IZZ])
 
 # Aerodynamic drag coefficients (linear viscous model).  These dampen modes
 # the cable wrench cannot reach -- in particular yaw rotation, which has
-# zero moment arm from the symmetric cable geometry (8 cables = 4 corners
-# x 2 cables, one to a UAV and one to a UGV per corner) and would
+# zero moment arm from the symmetric cable geometry (8 cables = 8 corners
+# of a rectangular platform; the 4 top corners are pulled by UAVs and the
+# 4 bottom corners are pulled by UGVs, one cable per corner) and would
 # otherwise integrate freely under any small disturbance.  Translational
 # drag is small (cable forces dominate), while yaw drag is intentionally
 # higher to lump together the residual aerodynamic + small frictional
