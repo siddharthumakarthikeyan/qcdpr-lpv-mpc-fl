@@ -24,6 +24,17 @@ from dynamics.uav_dynamics import rotation_matrix
 I_PLAT = np.diag([PLATFORM_IXX, PLATFORM_IYY, PLATFORM_IZZ])
 I_PLAT_INV = np.diag([1/PLATFORM_IXX, 1/PLATFORM_IYY, 1/PLATFORM_IZZ])
 
+# Aerodynamic drag coefficients (linear viscous model).  These dampen modes
+# the cable wrench cannot reach \u2014 in particular yaw rotation, which has
+# zero moment arm from the symmetric cable geometry and would otherwise
+# integrate freely under any small disturbance.  Translational drag is
+# small (cable forces dominate), but rotational drag is significant for
+# realism: a real platform suspended by 8 cables with two-cable-per-corner
+# wraparound has substantial yaw friction.
+DRAG_TRANS = 0.5         # N\u00b7s/m  (per axis)
+DRAG_ROLL_PITCH = 0.2    # N\u00b7m\u00b7s/rad
+DRAG_YAW   = 1.5         # N\u00b7m\u00b7s/rad  (high \u2014 cable wrap-around friction)
+
 
 def compute_wrench(cable_forces: np.ndarray,
                    corner_positions: np.ndarray) -> tuple:
@@ -34,29 +45,67 @@ def compute_wrench(cable_forces: np.ndarray,
     return F_net, tau_net
 
 
+def _euler_rate_from_body(phi: float, theta: float,
+                           omega_body: np.ndarray) -> np.ndarray:
+    """
+    Map body angular velocity (p, q, r) to ZYX Euler-angle rates.
+    Standard kinematic relation:
+        [dphi  ]   [1  sin(phi)tan(theta)  cos(phi)tan(theta)] [p]
+        [dtheta] = [0  cos(phi)            -sin(phi)         ] [q]
+        [dpsi  ]   [0  sin(phi)/cos(theta) cos(phi)/cos(theta)] [r]
+    """
+    sp, cp = np.sin(phi), np.cos(phi)
+    ct = np.cos(theta)
+    # Avoid singularity at theta = +/- pi/2; clamp ct away from zero.
+    if abs(ct) < 1e-3:
+        ct = 1e-3 if ct >= 0 else -1e-3
+    tt = np.sin(theta) / ct
+    p, q, r = omega_body
+    dphi   = p + sp*tt*q + cp*tt*r
+    dtheta = cp*q - sp*r
+    dpsi   = (sp/ct)*q + (cp/ct)*r
+    return np.array([dphi, dtheta, dpsi])
+
+
 def continuous_dynamics(state: np.ndarray,
                         F_cable_net: np.ndarray,
                         tau_cable_net: np.ndarray,
                         mass: float = PLATFORM_MASS) -> np.ndarray:
-    vx, vy, vz = state[3], state[4], state[5]
-    phi, theta, psi = state[6], state[7], state[8]
-    dp, dq, dr = state[9], state[10], state[11]
+    """
+    Rigid-body 6-DoF dynamics.
+    State layout (12,):
+        [px,py,pz, vx,vy,vz, phi,theta,psi, p,q,r]
+    where (p,q,r) are BODY angular rates and (phi,theta,psi) are ZYX Euler
+    angles describing world->body rotation (R = Rz(psi)*Ry(theta)*Rx(phi)).
+    Forces and torques are in the WORLD frame.
+    """
+    vx, vy, vz       = state[3], state[4], state[5]
+    phi, theta, psi  = state[6], state[7], state[8]
+    p, q, r          = state[9], state[10], state[11]
 
-    ax = F_cable_net[0] / mass
-    ay = F_cable_net[1] / mass
-    az = F_cable_net[2] / mass - G
+    ax = (F_cable_net[0] - DRAG_TRANS * vx) / mass
+    ay = (F_cable_net[1] - DRAG_TRANS * vy) / mass
+    az = (F_cable_net[2] - DRAG_TRANS * vz) / mass - G
 
     R = rotation_matrix(phi, theta, psi)
     tau_body = R.T @ tau_cable_net
 
-    omega_body = np.array([dp, dq, dr])
-    gyro = np.cross(omega_body, I_PLAT @ omega_body)
-    omega_dot = I_PLAT_INV @ (tau_body - gyro)
+    # Body-frame aerodynamic angular drag (essential for yaw stability since
+    # the cable geometry cannot apply yaw torque).
+    drag_body = np.array([DRAG_ROLL_PITCH * p,
+                           DRAG_ROLL_PITCH * q,
+                           DRAG_YAW        * r])
+
+    omega_body = np.array([p, q, r])
+    gyro       = np.cross(omega_body, I_PLAT @ omega_body)
+    omega_dot  = I_PLAT_INV @ (tau_body - gyro - drag_body)
+
+    euler_dot = _euler_rate_from_body(phi, theta, omega_body)
 
     return np.array([
         vx, vy, vz,
         ax, ay, az,
-        dp, dq, dr,
+        euler_dot[0], euler_dot[1], euler_dot[2],
         omega_dot[0], omega_dot[1], omega_dot[2]
     ])
 

@@ -1,0 +1,26 @@
+# Byte-compiled / cached
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE / editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated artefacts
+results/*.mp4
+results/*.gif
+results/*.pkl
+results/*.log
+
+# Logs
+*.log

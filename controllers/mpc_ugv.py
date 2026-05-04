@@ -110,7 +110,7 @@ class MPCUGVController:
             self._u_warm[n_turn:] = [UGV_MAX_VEL, 0.0]
             self._need_extra_iters = True
 
-        bounds  = [(0.0, UGV_MAX_VEL),
+        bounds  = [(-UGV_MAX_VEL, UGV_MAX_VEL),
                    (-UGV_MAX_ANG_VEL, UGV_MAX_ANG_VEL)] * self.N
         maxiter = 200 if self._need_extra_iters else 60
 
@@ -131,6 +131,6 @@ class MPCUGVController:
 
         u0 = U_opt[0]
         return np.array([
-            np.clip(u0[0],  0.0,           UGV_MAX_VEL),
+            np.clip(u0[0], -UGV_MAX_VEL,    UGV_MAX_VEL),
             np.clip(u0[1], -UGV_MAX_ANG_VEL, UGV_MAX_ANG_VEL),
         ])

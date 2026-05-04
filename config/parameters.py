@@ -96,10 +96,15 @@ UGV_Q = np.diag([100.0, 100.0, 80.0, 0.5, 0.5, 0.1])
 UGV_R_MPC = np.diag([0.02, 0.08])
 UGV_P_MPC = np.diag([0.005, 0.02])
 
-PLAT_KP = np.array([200.0, 200.0, 300.0])
-PLAT_KD = np.array([60.0,  60.0,  70.0])
+PLAT_KP = np.array([240.0, 240.0, 400.0])
+PLAT_KD = np.array([85.0,  85.0,  110.0])
 PLAT_KP_YAW = 12.0
 PLAT_KD_YAW = 6.0
+# Roll/pitch attitude stabilisation through cables. Critically damped at
+# omega_n ~ 7 rad/s.  These shape only the desired wrench fed to the
+# tension QP; the platform itself integrates freely.
+PLAT_KP_RP = 50.0
+PLAT_KD_RP = 14.0
 
 FL_KP = np.array([15.0, 15.0, 25.0])
 FL_KD = np.array([10.0, 10.0, 12.0])

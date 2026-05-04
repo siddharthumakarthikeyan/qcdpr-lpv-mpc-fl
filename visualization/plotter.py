@@ -20,6 +20,15 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from matplotlib.animation import FuncAnimation, FFMpegWriter, PillowWriter
+
+# Make matplotlib pick up the ffmpeg binary that ships with imageio-ffmpeg
+# at module import time, before any FFMpegWriter is constructed.  This is
+# what enables MP4 export on Windows machines without a system ffmpeg.
+try:
+    import imageio_ffmpeg as _iff
+    matplotlib.rcParams['animation.ffmpeg_path'] = _iff.get_ffmpeg_exe()
+except Exception:
+    pass
 from matplotlib.patches import Patch
 from pathlib import Path
 

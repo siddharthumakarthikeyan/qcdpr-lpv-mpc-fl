@@ -24,8 +24,9 @@ from config.parameters import (
     NUM_UAVS, NUM_UGVS,
     PLATFORM_ZREF, DT, T_SIM,
     UAV_MASS, G, UAV_MAX_THRUST, UAV_PHI_MAX, UAV_THETA_MAX,
-    PLATFORM_MASS, PLATFORM_IZZ,
+    PLATFORM_MASS, PLATFORM_IZZ, PLATFORM_IXX, PLATFORM_IYY,
     PLAT_KP, PLAT_KD, PLAT_KP_YAW, PLAT_KD_YAW,
+    PLAT_KP_RP, PLAT_KD_RP,
 )
 from dynamics.uav_dynamics      import UAVState, step_rk4 as uav_step
 from dynamics.ugv_dynamics      import UGVState, step_rk4 as ugv_step
@@ -119,15 +120,21 @@ def run_simulation(trajectory,
 
     t0_pose, t0_vel, t0_acc = trajectory(0.0)
 
-    platform = PlatformState(t0_pose[:3], yaw=t0_pose[5])
+    # Force the platform/IK initial frame to the symmetric (zero-attitude)
+    # configuration: this is the only physically reachable steady state
+    # because the cables cannot drive the platform yaw, and any non-zero
+    # initial yaw mismatches between UAV/UGV layout and the IK target
+    # produces a step disturbance at t=0.
+    t0_pose_ik = t0_pose.copy()
+    t0_pose_ik[3:6] = 0.0
 
-    uav_init = _initial_uav_positions(t0_pose)
-    ugv_init = _initial_ugv_positions(t0_pose)
+    platform = PlatformState(t0_pose_ik[:3], yaw=0.0)
 
-    uavs = [UAVState(uav_init[i], yaw=t0_pose[5]) for i in range(NUM_UAVS)]
-    ugv_init_yaw = (float(np.arctan2(t0_vel[1], t0_vel[0]))
-                    if np.hypot(t0_vel[0], t0_vel[1]) > 0.01 else 0.0)
-    ugvs = [UGVState(ugv_init[i], yaw=ugv_init_yaw) for i in range(NUM_UGVS)]
+    uav_init = _initial_uav_positions(t0_pose_ik)
+    ugv_init = _initial_ugv_positions(t0_pose_ik)
+
+    uavs = [UAVState(uav_init[i], yaw=0.0) for i in range(NUM_UAVS)]
+    ugvs = [UGVState(ugv_init[i], yaw=0.0) for i in range(NUM_UGVS)]
 
     for uav in uavs:
         uav.u = np.array([UAV_MASS * G, 0.0, 0.0, 0.0])
@@ -152,12 +159,14 @@ def run_simulation(trajectory,
     uav_pos_3d_init = np.array([u.position for u in uavs])
     ugv_pos_2d_init = np.array([g.position for g in ugvs])
     robot_pos_init  = all_robot_positions_3d(uav_pos_3d_init, ugv_pos_2d_init)
-    ctop_init, cbot_init = platform_corners_world(t0_pose)
+    ctop_init, cbot_init = platform_corners_world(t0_pose_ik)
     corner_pos_init = all_corner_positions(ctop_init, cbot_init)
     tau_prev = solve_tensions(robot_pos_init, corner_pos_init,
                               platform_center=platform.position)
     cable_f_robots_init = cable_reaction_on_robot(tau_prev, robot_pos_init, corner_pos_init)
     uav_cable_forces_prev = [cable_f_robots_init[i].copy() for i in range(NUM_UAVS)]
+    # Low-pass filtered cable feedforward (smoother for the UAV FL controller).
+    uav_cable_ff_filt = [cable_f_robots_init[i].copy() for i in range(NUM_UAVS)]
 
     for i, uav in enumerate(uavs):
         f_c      = uav_cable_forces_prev[i]
@@ -182,14 +191,12 @@ def run_simulation(trajectory,
 
         ctrl_mass = ekf.m_eff if adaptive else PLATFORM_MASS
 
-        uav_tgt_nom, ugv_tgt_nom, ctop_nom, cbot_nom = compute_robot_targets(ref_pose)
-        ugv_pos_2d_now = np.array([g.position for g in ugvs])
-        robot_pos_nom  = all_robot_positions_3d(uav_tgt_nom, ugv_pos_2d_now)
-        corner_pos_nom = all_corner_positions(ctop_nom, cbot_nom)
-        tau_nom        = solve_tensions(robot_pos_nom, corner_pos_nom,
-                                        platform_center=ref_pose[:3])
-        cable_f_nom    = cable_reaction_on_robot(tau_nom, robot_pos_nom, corner_pos_nom)
-        uav_cable_ff   = [cable_f_nom[i].copy() for i in range(NUM_UAVS)]
+        # Cable feedforward for the UAV controllers.
+        # We use the cable reaction force from the previous solve as a
+        # one-step prediction of what each UAV will physically experience.
+        # The tension QP's tight rate-limit (DELTA_TAU_MAX) already smooths
+        # the cable forces enough that no extra low-pass is needed.
+        uav_cable_ff = [uav_cable_forces_prev[i].copy() for i in range(NUM_UAVS)]
 
         uav_states = [u.x.copy() for u in uavs]
         ugv_states = [g.x.copy() for g in ugvs]
@@ -215,15 +222,28 @@ def run_simulation(trajectory,
         F_track  = ctrl_mass * ref_acc[:3] + PLAT_KP * pos_err + PLAT_KD * vel_err
         F_track[2] += ctrl_mass * G
 
-        yaw_err  = np.arctan2(np.sin(ref_pose[5] - plat_pose_actual[5]),
-                               np.cos(ref_pose[5] - plat_pose_actual[5]))
-        dyaw_err = ref_vel[5] - platform.x[11]
-        tau_z_des = PLATFORM_IZZ * (ref_acc[5]
-                                     + PLAT_KP_YAW * yaw_err
-                                     + PLAT_KD_YAW * dyaw_err)
+        # Yaw is left uncontrolled by the cables (rank deficiency), but is
+        # passively damped through the platform's aerodynamic drag model in
+        # platform_dynamics.continuous_dynamics.  We therefore command zero
+        # yaw torque from the QP — any non-zero command would corrupt the
+        # roll/pitch torque allocation since the QP weights all torque rows
+        # equally and the yaw row is unreachable.
+        tau_z_des = 0.0
+
+        # Roll / pitch attitude stabilisation through the cables.
+        # The platform is *free* to tilt (no artificial limits) \u2014 we just
+        # ask the tension solver to allocate cable forces so the resulting
+        # net torque drives roll/pitch back to zero.  This is genuine
+        # closed-loop attitude control, not a kinematic constraint.
+        phi_p, theta_p, _   = plat_pose_actual[3:6]
+        dphi_p, dtheta_p, _ = platform.x[9:12]
+        tau_x_des = PLATFORM_IXX * (PLAT_KP_RP * (-phi_p)   + PLAT_KD_RP * (-dphi_p))
+        tau_y_des = PLATFORM_IYY * (PLAT_KP_RP * (-theta_p) + PLAT_KD_RP * (-dtheta_p))
 
         F_ext_desired      = np.zeros(6)
         F_ext_desired[:3]  = F_track
+        F_ext_desired[3]   = tau_x_des
+        F_ext_desired[4]   = tau_y_des
         F_ext_desired[5]   = tau_z_des
 
         tau = solve_tensions(robot_pos, corner_pos,
@@ -237,24 +257,30 @@ def run_simulation(trajectory,
         cable_f_robots = cable_reaction_on_robot( tau, robot_pos, corner_pos)
         uav_cable_forces_prev = [cable_f_robots[i].copy() for i in range(NUM_UAVS)]
 
+        # Real net wrench on the platform from cable forces (no overwrites).
+        # The platform freely responds to whatever roll/pitch torque the
+        # cable geometry produces — no artificial flattening of (tau_x,tau_y).
         F_net   = cable_f_plat.sum(axis=0)
         tau_net = np.zeros(3)
         plat_center = platform.position
         for ci in range(8):
             tau_net += np.cross(corner_pos[ci] - plat_center, cable_f_plat[ci])
-        tau_net[:] = np.array([0.0, 0.0, tau_z_des])
 
         vel_before_step = platform.velocity.copy()
         next_platform_x = platform_step(platform.x, F_net, tau_net, mass=true_mass, dt=dt)
         if np.all(np.isfinite(next_platform_x)):
             platform.x = next_platform_x
 
+        # Cable reaction forces on each UAV / UGV are now fed into their
+        # rigid-body dynamics — closing the physical loop end-to-end.
         for i, uav in enumerate(uavs):
-            uav.x = uav_step(uav.x, uav_ctrls[i], np.zeros(3), dt=dt)
+            f_cable_uav_i = cable_f_robots[i]                # (3,) Newtons
+            uav.x = uav_step(uav.x, uav_ctrls[i], f_cable_uav_i, dt=dt)
             uav.u = uav_ctrls[i]
 
         for i, ugv in enumerate(ugvs):
-            ugv.x = ugv_step(ugv.x, ugv_ctrls[i], np.zeros(2), dt=dt)
+            f_cable_ugv_i = cable_f_robots[4 + i][:2]        # horizontal pull only
+            ugv.x = ugv_step(ugv.x, ugv_ctrls[i], f_cable_ugv_i, dt=dt)
 
         if adaptive and ekf is not None:
             acc_measured = (platform.velocity - vel_before_step) / dt

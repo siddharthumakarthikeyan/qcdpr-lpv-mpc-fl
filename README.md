@@ -20,6 +20,61 @@ All MPC problems are solved via **direct OSQP calls on condensed (input-only) QP
 
 ---
 
+## Cable-Tension Coupling (this branch)
+
+This branch (`cable-tension`) closes the physical loop between the tension
+solver and every actuator in the system. Previous revisions ran the tension
+QP for monitoring only — the resulting forces were never applied to the UAV
+or UGV dynamics, and the platform attitude was advanced by integrating body
+rates as if they were Euler rates. The system therefore looked stable on
+small motions but masked structural bugs above a few degrees of tilt.
+
+The following changes make the simulation physically consistent end-to-end:
+
+- **Cable forces propagate into UAV and UGV dynamics.** The 8-cable QP output
+  is now fed into `uav_step` / `ugv_step` instead of zero force vectors, and
+  the FL position controller receives the same vector as a feed-forward term
+  (`a_eff = a_cmd − F_cable / m_uav`).
+- **Real platform wrench.** The net torque on the end-effector is computed
+  from the actual cable forces at each anchor point
+  (`τ_net = Σ (rᵢ − r_p) × fᵢ`) instead of being overwritten by a
+  fixed-yaw command. Because the 8-cable wrench matrix `W` is rank-5 (no
+  yaw torque authority), `τ_z_des` is held at zero and yaw is damped
+  passively by aerodynamic drag.
+- **Correct ZYX Euler-rate kinematics.** Platform attitude is now advanced
+  with `_euler_rate_from_body(φ, θ, ω_body)` and a singularity clamp at
+  `|cos θ| < 1e-3`, replacing the previous body-rate-as-Euler-rate
+  shortcut. Aerodynamic drag (`DRAG_TRANS`, `DRAG_ROLL_PITCH`,
+  `DRAG_YAW`) is added to all six DoFs.
+- **Symmetric IK frame.** Inverse kinematics targets a zero-attitude
+  platform pose so that all four UAV/UGV pairs share the same nominal
+  geometry; this avoids a step disturbance at `t = 0`.
+- **Bidirectional UGV velocity bounds.** UGVs are no longer constrained
+  to forward-only motion, so they can actively counter a cable pull while
+  stationary.
+- **Realistic cable feed-forward limits.** `MAX_CABLE_ACC_XY = 80 m/s²`
+  and `MAX_CABLE_ACC_Z = 100 m/s²` (previously 8 / 30) ensure the
+  feed-forward term is not clipped at typical operating tensions.
+- **Roll/pitch attitude PD on the platform** through the cables:
+  `τ_x_des = I_xx (K_p,rp · (−φ_p) + K_d,rp · (−φ̇_p))`, with matching
+  pitch-axis term.
+- **MP4 export without a system ffmpeg.** `visualization/plotter.py` now
+  injects the `imageio-ffmpeg` binary path into matplotlib at import
+  time, so `--save-mp4` works on Windows out of the box.
+
+### Verified tracking with cable-tension coupling enabled
+
+| Trajectory    | X MAE  | Y MAE  | Z MAE  | Notes                          |
+|---------------|--------|--------|--------|--------------------------------|
+| Quadrilateral | 1.93 mm | 1.92 mm | 0.00 mm | `|att|` < 0.02°               |
+| Circular      | 2.87 mm | 2.87 mm | 0.00 mm | `|att|` < 0.5°                |
+| Sinusoidal    | 2.39 mm | 7.65 mm | 0.00 mm | `|φ|max = 4.49°`, `|θ|max = 2.98°` |
+
+Adaptive payload-change scenario (60 s, +2 kg step at 30 s):
+**MAE x = 27 mm, y = 33 mm, z = 73 mm.**
+
+---
+
 ## System Architecture
 
 ```

@@ -30,10 +30,15 @@ from dynamics.uav_dynamics import lpv_linearise
 
 TAU_MAX = 2.0
 _EPS    = 1e-6
+ # Position-controller acceleration limits.
 MAX_ACC_XY = 8.0
-MAX_ACC_Z = 10.0
-MAX_CABLE_ACC_XY = 8.0
-MAX_CABLE_ACC_Z = 30.0
+MAX_ACC_Z  = 10.0
+# Cable-acceleration feedforward limits.  The cable can pull a UAV with up
+# to ~T_max/m_uav = 50/0.5 = 100 m/s^2; do NOT clip below that or the FL
+# controller cannot cancel real cable load — cable forces propagate from
+# the platform through the UAVs and we MUST compensate them in full.
+MAX_CABLE_ACC_XY = 80.0
+MAX_CABLE_ACC_Z  = 100.0
 
 
 class FeedbackLinearisationPositionController:
