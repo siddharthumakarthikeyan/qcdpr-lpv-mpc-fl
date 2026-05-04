@@ -25,15 +25,16 @@ I_PLAT = np.diag([PLATFORM_IXX, PLATFORM_IYY, PLATFORM_IZZ])
 I_PLAT_INV = np.diag([1/PLATFORM_IXX, 1/PLATFORM_IYY, 1/PLATFORM_IZZ])
 
 # Aerodynamic drag coefficients (linear viscous model).  These dampen modes
-# the cable wrench cannot reach \u2014 in particular yaw rotation, which has
-# zero moment arm from the symmetric cable geometry and would otherwise
-# integrate freely under any small disturbance.  Translational drag is
-# small (cable forces dominate), but rotational drag is significant for
-# realism: a real platform suspended by 8 cables with two-cable-per-corner
-# wraparound has substantial yaw friction.
-DRAG_TRANS = 0.5         # N\u00b7s/m  (per axis)
-DRAG_ROLL_PITCH = 0.2    # N\u00b7m\u00b7s/rad
-DRAG_YAW   = 1.5         # N\u00b7m\u00b7s/rad  (high \u2014 cable wrap-around friction)
+# the cable wrench cannot reach -- in particular yaw rotation, which has
+# zero moment arm from the symmetric cable geometry (8 cables = 4 corners
+# x 2 cables, one to a UAV and one to a UGV per corner) and would
+# otherwise integrate freely under any small disturbance.  Translational
+# drag is small (cable forces dominate), while yaw drag is intentionally
+# higher to lump together the residual aerodynamic + small frictional
+# effects at the cable attachment points.
+DRAG_TRANS = 0.5         # N*s/m  (per axis)
+DRAG_ROLL_PITCH = 0.2    # N*m*s/rad
+DRAG_YAW   = 1.5         # N*m*s/rad
 
 
 def compute_wrench(cable_forces: np.ndarray,
