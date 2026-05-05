@@ -16,13 +16,16 @@ All rights reserved. Released for academic research use only.
 """
 import numpy as np
 from config.parameters import (
-    PLATFORM_MASS, PLATFORM_IXX, PLATFORM_IYY, PLATFORM_IZZ, G, DT
+    PLATFORM_MASS, PLATFORM_IXX, PLATFORM_IYY, PLATFORM_IZZ, G, DT,
+    PLAT_DRAG_TRANS, PLAT_DRAG_ROLLPITCH, PLAT_DRAG_YAW,
 )
 from dynamics.uav_dynamics import rotation_matrix
 
 
 I_PLAT = np.diag([PLATFORM_IXX, PLATFORM_IYY, PLATFORM_IZZ])
 I_PLAT_INV = np.diag([1/PLATFORM_IXX, 1/PLATFORM_IYY, 1/PLATFORM_IZZ])
+D_TRANS  = np.array([PLAT_DRAG_TRANS, PLAT_DRAG_TRANS, PLAT_DRAG_TRANS])
+D_ROT    = np.array([PLAT_DRAG_ROLLPITCH, PLAT_DRAG_ROLLPITCH, PLAT_DRAG_YAW])
 
 
 def compute_wrench(cable_forces: np.ndarray,
@@ -72,14 +75,21 @@ def continuous_dynamics(state: np.ndarray,
     phi, theta, psi  = state[6], state[7], state[8]
     p, q, r          = state[9], state[10], state[11]
 
-    ax = F_cable_net[0] / mass
-    ay = F_cable_net[1] / mass
-    az = F_cable_net[2] / mass - G
+    # Linear aerodynamic drag in the world frame (translation) and body
+    # frame (rotation).  Provides a guaranteed damping floor independent
+    # of the cable wrench and the payload mass.
+    v_world  = np.array([vx, vy, vz])
+    F_drag   = -D_TRANS * v_world
+    omega_body = np.array([p, q, r])
+    tau_drag_body = -D_ROT * omega_body
+
+    ax = (F_cable_net[0] + F_drag[0]) / mass
+    ay = (F_cable_net[1] + F_drag[1]) / mass
+    az = (F_cable_net[2] + F_drag[2]) / mass - G
 
     R = rotation_matrix(phi, theta, psi)
-    tau_body = R.T @ tau_cable_net
+    tau_body = R.T @ tau_cable_net + tau_drag_body
 
-    omega_body = np.array([p, q, r])
     gyro       = np.cross(omega_body, I_PLAT @ omega_body)
     omega_dot  = I_PLAT_INV @ (tau_body - gyro)
 

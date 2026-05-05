@@ -135,6 +135,19 @@ PLAT_KD_RP = 18.0
 FL_KP = np.array([15.0, 15.0, 25.0])
 FL_KD = np.array([10.0, 10.0, 12.0])
 
+# ---------------------------------------------------------------------------
+# Platform aerodynamic drag.  The platform is a bluff body (0.8 x 0.8 x 0.1 m)
+# moving slowly through still air, so a linear drag model F_drag = -C v is
+# adequate.  A small but non-zero drag provides a guaranteed damping floor
+# for the position and attitude loops -- without it, the only sources of
+# damping are the cables themselves, which become proportionally weaker as
+# the payload mass grows (mu_eff = c_cable / m).  The values below give
+# tau_settle ~ 0.5 s in translation and ~0.3 s in rotation at the 3 kg
+# nominal mass, well below the controller bandwidths.
+PLAT_DRAG_TRANS    = 6.0   # N / (m/s)   per axis
+PLAT_DRAG_ROLLPITCH = 1.2  # N.m / (rad/s)
+PLAT_DRAG_YAW       = 0.8  # N.m / (rad/s)
+
 TENSION_MAX_ITER  = 100
 TENSION_TOL       = 1e-6
 TENSION_ALPHA_MIN = 1e-4

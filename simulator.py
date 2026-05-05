@@ -27,6 +27,7 @@ from config.parameters import (
     PLATFORM_MASS, PLATFORM_IZZ, PLATFORM_IXX, PLATFORM_IYY,
     PLAT_KP, PLAT_KD, PLAT_KP_YAW, PLAT_KD_YAW,
     PLAT_KP_RP, PLAT_KD_RP,
+    PLAT_DRAG_TRANS, PLAT_DRAG_ROLLPITCH, PLAT_DRAG_YAW,
 )
 from dynamics.uav_dynamics      import UAVState, step_rk4 as uav_step
 from dynamics.ugv_dynamics      import UGVState, step_rk4 as ugv_step
@@ -219,7 +220,24 @@ def run_simulation(trajectory,
 
         pos_err  = ref_pose[:3] - platform.position
         vel_err  = ref_vel[:3]  - platform.velocity
-        F_track  = ctrl_mass * ref_acc[:3] + PLAT_KP * pos_err + PLAT_KD * vel_err
+        # Scale the position-loop PD by the *estimated* mass so the
+        # closed-loop natural frequency and damping ratio are invariant
+        # under payload changes.  Without this rescaling, a step in the
+        # platform mass (e.g. +2 kg at t = 30 s) reduces \u03c9_n by
+        # sqrt(m_new/m_nom) and \u03b6 by the same factor, leaving the loop
+        # underdamped and prone to limit-cycling against the rate-limited
+        # tension QP during fast reference transitions.
+        mass_scale = ctrl_mass / PLATFORM_MASS
+        F_track  = (ctrl_mass * ref_acc[:3]
+                    + mass_scale * PLAT_KP * pos_err
+                    + mass_scale * PLAT_KD * vel_err)
+        # Aerodynamic drag feed-forward: cancel the known linear drag the
+        # platform will experience at the current velocity.  Without this,
+        # the drag becomes an unmodeled disturbance that biases the
+        # position loop on trajectories with sustained non-zero velocity
+        # (e.g. circular).  With it, the drag only contributes closed-loop
+        # damping and does not move the steady-state set point.
+        F_track += PLAT_DRAG_TRANS * platform.velocity
         F_track[2] += ctrl_mass * G
 
         # Yaw is now actively controlled through the cables thanks to
@@ -234,6 +252,8 @@ def run_simulation(trajectory,
         tau_z_des = PLATFORM_IZZ * (
             ref_acc[5] + PLAT_KP_YAW * psi_err + PLAT_KD_YAW * dpsi_err
         )
+        # Yaw drag feed-forward (compensates -PLAT_DRAG_YAW * r in dynamics).
+        tau_z_des += PLAT_DRAG_YAW * r_body
 
         # Roll / pitch attitude stabilisation through the cables.
         # The platform is *free* to tilt (no artificial limits) \u2014 we just
@@ -244,6 +264,9 @@ def run_simulation(trajectory,
         dphi_p, dtheta_p, _ = platform.x[9:12]
         tau_x_des = PLATFORM_IXX * (PLAT_KP_RP * (-phi_p)   + PLAT_KD_RP * (-dphi_p))
         tau_y_des = PLATFORM_IYY * (PLAT_KP_RP * (-theta_p) + PLAT_KD_RP * (-dtheta_p))
+        # Roll/pitch drag feed-forward.
+        tau_x_des += PLAT_DRAG_ROLLPITCH * dphi_p
+        tau_y_des += PLAT_DRAG_ROLLPITCH * dtheta_p
 
         F_ext_desired      = np.zeros(6)
         F_ext_desired[:3]  = F_track
