@@ -24,19 +24,6 @@ from dynamics.uav_dynamics import rotation_matrix
 I_PLAT = np.diag([PLATFORM_IXX, PLATFORM_IYY, PLATFORM_IZZ])
 I_PLAT_INV = np.diag([1/PLATFORM_IXX, 1/PLATFORM_IYY, 1/PLATFORM_IZZ])
 
-# Aerodynamic drag coefficients (linear viscous model).  These dampen modes
-# the cable wrench cannot reach -- in particular yaw rotation, which has
-# zero moment arm from the symmetric cable geometry (8 cables = 8 corners
-# of a rectangular platform; the 4 top corners are pulled by UAVs and the
-# 4 bottom corners are pulled by UGVs, one cable per corner) and would
-# otherwise integrate freely under any small disturbance.  Translational
-# drag is small (cable forces dominate), while yaw drag is intentionally
-# higher to lump together the residual aerodynamic + small frictional
-# effects at the cable attachment points.
-DRAG_TRANS = 0.5         # N*s/m  (per axis)
-DRAG_ROLL_PITCH = 0.2    # N*m*s/rad
-DRAG_YAW   = 1.5         # N*m*s/rad
-
 
 def compute_wrench(cable_forces: np.ndarray,
                    corner_positions: np.ndarray) -> tuple:
@@ -85,22 +72,16 @@ def continuous_dynamics(state: np.ndarray,
     phi, theta, psi  = state[6], state[7], state[8]
     p, q, r          = state[9], state[10], state[11]
 
-    ax = (F_cable_net[0] - DRAG_TRANS * vx) / mass
-    ay = (F_cable_net[1] - DRAG_TRANS * vy) / mass
-    az = (F_cable_net[2] - DRAG_TRANS * vz) / mass - G
+    ax = F_cable_net[0] / mass
+    ay = F_cable_net[1] / mass
+    az = F_cable_net[2] / mass - G
 
     R = rotation_matrix(phi, theta, psi)
     tau_body = R.T @ tau_cable_net
 
-    # Body-frame aerodynamic angular drag (essential for yaw stability since
-    # the cable geometry cannot apply yaw torque).
-    drag_body = np.array([DRAG_ROLL_PITCH * p,
-                           DRAG_ROLL_PITCH * q,
-                           DRAG_YAW        * r])
-
     omega_body = np.array([p, q, r])
     gyro       = np.cross(omega_body, I_PLAT @ omega_body)
-    omega_dot  = I_PLAT_INV @ (tau_body - gyro - drag_body)
+    omega_dot  = I_PLAT_INV @ (tau_body - gyro)
 
     euler_dot = _euler_rate_from_body(phi, theta, omega_body)
 

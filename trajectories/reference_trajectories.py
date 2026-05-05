@@ -99,8 +99,14 @@ class CircularTrajectory:
         ax  = -self.R * w**2 * np.cos(th)
         ay  = -self.R * w**2 * np.sin(th)
 
-        psi   = th + np.pi / 2
-        dpsi  = w
+        # Yaw is held at zero: the cable wrench has only a small
+        # tangential moment arm (set by CABLE_SKEW_ANGLE_DEG) so the
+        # achievable yaw bandwidth is much lower than the bandwidth of
+        # this trajectory's tangential motion.  Commanding
+        # psi = th + pi/2 would force the controller to track a yaw
+        # rotation it cannot physically deliver.
+        psi   = 0.0
+        dpsi  = 0.0
         ddpsi = 0.0
 
         pose  = np.array([px, py, self.z, 0.0, 0.0, _wrap(psi)])
@@ -129,10 +135,9 @@ class SinusoidalTrajectory:
         ax = 0.0
         ay = -self.A * w**2 * np.sin(w * t)
 
-        vx_eff = max(vx, 0.40)
-        psi    = np.arctan2(vy, vx_eff)
-        speed_eff = np.hypot(vx_eff, vy) + 1e-8
-        dpsi  = ay * vx_eff / speed_eff**2
+        # Yaw held at zero — see CircularTrajectory note above.
+        psi   = 0.0
+        dpsi  = 0.0
         ddpsi = 0.0
 
         pose  = np.array([px, py, self.z, 0.0, 0.0, _wrap(psi)])

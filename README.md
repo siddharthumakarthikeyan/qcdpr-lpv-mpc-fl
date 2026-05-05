@@ -38,26 +38,39 @@ The following changes make the simulation physically consistent end-to-end:
 - **Real platform wrench.** The net torque on the end-effector is computed
   from the actual cable forces at each anchor point
   (`τ_net = Σ (rᵢ − r_p) × fᵢ`) instead of being overwritten by a
-  fixed-yaw command. Because the 8-cable wrench matrix `W` is rank-5 (no
-  yaw torque authority), `τ_z_des` is held at zero and yaw is damped
-  passively by aerodynamic drag.
-- **Correct ZYX Euler-rate kinematics.** Platform attitude is now advanced
+  fixed-yaw command.
+- **Rank-6 cable layout (active yaw through cables).** The radial
+  anchor offset of each robot is given a small alternating azimuthal
+  skew (`CABLE_SKEW_ANGLE_DEG = 8°`, signs `+,−,+,−` across the four
+  corners) so the 8-cable wrench matrix `W ∈ ℝ^{6×8}` becomes full row
+  rank. Yaw is now controllable by the physical cable wrench, and the
+  alternating sign keeps the net yaw torque at zero under uniform
+  tensions (no drift bias). The previous "yaw makeup" (forcing
+  `ψ_ref = 0` in the IK frame, plus artificial yaw drag) is removed
+  and `τ_z_des` is computed from a closed-loop yaw PD plus reference
+  feed-forward.
+- **Correct ZYX Euler-rate kinematics.** Platform attitude is advanced
   with `_euler_rate_from_body(φ, θ, ω_body)` and a singularity clamp at
   `|cos θ| < 1e-3`, replacing the previous body-rate-as-Euler-rate
-  shortcut. Aerodynamic drag (`DRAG_TRANS`, `DRAG_ROLL_PITCH`,
-  `DRAG_YAW`) is added to all six DoFs.
-- **Symmetric IK frame.** Inverse kinematics targets a zero-attitude
-  platform pose so that all four UAV/UGV pairs share the same nominal
-  geometry; this avoids a step disturbance at `t = 0`.
+  shortcut. The platform has **no aerodynamic drag**: the cables are
+  the sole source of translational and rotational damping, and the
+  roll/pitch/yaw PD gains are tuned for that.
+- **Symmetric IK frame.** Inverse kinematics targets a zero roll/pitch
+  platform pose (yaw follows the reference) so that all four UAV/UGV
+  pairs share the same nominal geometry; this avoids a step
+  disturbance at `t = 0`.
 - **Bidirectional UGV velocity bounds.** UGVs are no longer constrained
   to forward-only motion, so they can actively counter a cable pull while
   stationary.
 - **Realistic cable feed-forward limits.** `MAX_CABLE_ACC_XY = 80 m/s²`
   and `MAX_CABLE_ACC_Z = 100 m/s²` (previously 8 / 30) ensure the
   feed-forward term is not clipped at typical operating tensions.
-- **Roll/pitch attitude PD on the platform** through the cables:
-  `τ_x_des = I_xx (K_p,rp · (−φ_p) + K_d,rp · (−φ̇_p))`, with matching
-  pitch-axis term.
+- **Roll/pitch/yaw attitude PD on the platform** through the cables:
+  `τ_x_des = I_xx (K_p,rp · (−φ_p) + K_d,rp · (−φ̇_p))` and matching
+  pitch term, plus closed-loop yaw
+  `τ_z_des = I_zz (ψ̈_ref + K_p,yaw · ψ_err + K_d,yaw · ψ̇_err)`. All
+  three desired torques are fed to the tension QP, which then
+  allocates the eight cable tensions to realize the requested wrench.
 - **MP4 export without a system ffmpeg.** `visualization/plotter.py` now
   injects the `imageio-ffmpeg` binary path into matplotlib at import
   time, so `--save-mp4` works on Windows out of the box.

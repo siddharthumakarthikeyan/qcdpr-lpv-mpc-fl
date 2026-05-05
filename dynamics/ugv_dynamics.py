@@ -29,8 +29,6 @@ def continuous_dynamics(state: np.ndarray,
     tau_v  = 0.05
     tau_om = 0.05
 
-    v_actual = np.hypot(vx, vy) if v_cmd > 0 else -np.hypot(vx, vy)
-
     ax_cable = F_cable[0] / UGV_MASS
     ay_cable = F_cable[1] / UGV_MASS
 

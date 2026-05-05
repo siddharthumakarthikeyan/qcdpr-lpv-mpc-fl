@@ -39,33 +39,34 @@ class CentralizedController:
              ref_accel:     np.ndarray,
              uav_cable_forces: list | None = None,
              actual_platform_pose: np.ndarray | None = None) -> tuple:
-        # Build the IK reference pose with the symmetric nominal attitude
-        # (zero roll, pitch and yaw).
-        #   - Roll/pitch = 0 because the platform attitude controller drives
-        #     them back to zero through the cables.
-        #   - Yaw   = 0 because the symmetric cable geometry has no yaw
-        #     torque authority; using anything other than the symmetric
-        #     configuration introduces an uncontrollable mode that
-        #     eventually destabilises position tracking.
-        # Position tracking is therefore fully decoupled from any yaw the
-        # trajectory may command.  This is the key kinematic decoupling
-        # that makes the closed loop globally stable.
-        ik_pose       = ref_pose.copy()
-        ik_pose[3:6]  = 0.0
+        # Build the IK reference pose directly from the trajectory.  With
+        # the unsymmetric (rank-6) cable layout (CABLE_SKEW_ANGLE_DEG > 0)
+        # yaw is actively controllable through the cables, so we no
+        # longer force psi = 0 in the IK frame.  Roll/pitch are passed
+        # through as well \u2014 trajectories currently command zero
+        # roll/pitch, but the pipeline now supports non-zero attitude
+        # references.
+        ik_pose = ref_pose.copy()
 
         uav_targets, ugv_targets, corners_top, corners_bot = \
             compute_robot_targets(ik_pose)
 
-        ik_vel       = ref_velocity.copy()
-        ik_vel[3:6]  = 0.0          # no commanded attitude rate
+        ik_vel = ref_velocity.copy()
 
+        # Finite-difference UGV targets so the velocity / acceleration
+        # feedforward includes the yaw-rate-induced motion of the
+        # rotating IK frame (essential for circular/sinusoidal where
+        # dpsi != 0).  UAV velocity uses the analytic body-rate Jacobian
+        # via compute_desired_uav_velocity().
         ref_pose_next = ik_pose.copy()
         ref_pose_next[:3] += ik_vel[:3] * DT
+        ref_pose_next[3:6] += ik_vel[3:6] * DT
         _, ugv_targets_next, _, _ = compute_robot_targets(ref_pose_next)
         ugv_vel_targets = (ugv_targets_next - ugv_targets) / DT
 
         ref_pose_prev = ik_pose.copy()
         ref_pose_prev[:3] -= ik_vel[:3] * DT
+        ref_pose_prev[3:6] -= ik_vel[3:6] * DT
         _, ugv_targets_prev, _, _ = compute_robot_targets(ref_pose_prev)
         ugv_vel_prev = (ugv_targets - ugv_targets_prev) / DT
         ugv_acc_targets = (ugv_vel_targets - ugv_vel_prev) / DT
@@ -73,7 +74,10 @@ class CentralizedController:
         uav_vel_targets = compute_desired_uav_velocity(ik_vel, ik_pose)
 
         uav_controls = []
-        ref_psi = ik_pose[5]
+        # The UAV body yaw is left at zero \u2014 only the UAV *position*
+        # tracks the rotating IK frame; rotating the UAV body itself
+        # would only burn control effort with no benefit.
+        ref_psi = 0.0
         for i in range(NUM_UAVS):
             ref_acc_i = np.array([ref_accel[0], ref_accel[1], ref_accel[2]])
             f_cable_ff = (uav_cable_forces[i]

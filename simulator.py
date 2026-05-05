@@ -120,21 +120,21 @@ def run_simulation(trajectory,
 
     t0_pose, t0_vel, t0_acc = trajectory(0.0)
 
-    # Force the platform/IK initial frame to the symmetric (zero-attitude)
-    # configuration: this is the only physically reachable steady state
-    # because the cables cannot drive the platform yaw, and any non-zero
-    # initial yaw mismatches between UAV/UGV layout and the IK target
-    # produces a step disturbance at t=0.
-    t0_pose_ik = t0_pose.copy()
-    t0_pose_ik[3:6] = 0.0
+    # Initialise the platform and all robot frames at the *actual*
+    # reference pose.  The previous code clamped the initial frame to
+    # the symmetric (zero attitude) configuration to dodge the rank-5
+    # cable wrench; with the unsymmetric (rank-6) cable layout
+    # (CABLE_SKEW_ANGLE_DEG > 0) yaw is actively controllable so this
+    # "yaw makeup" is no longer required.
+    platform = PlatformState(t0_pose[:3], yaw=float(t0_pose[5]))
+    platform.x[6] = float(t0_pose[3])
+    platform.x[7] = float(t0_pose[4])
 
-    platform = PlatformState(t0_pose_ik[:3], yaw=0.0)
-
-    uav_init = _initial_uav_positions(t0_pose_ik)
-    ugv_init = _initial_ugv_positions(t0_pose_ik)
+    uav_init = _initial_uav_positions(t0_pose)
+    ugv_init = _initial_ugv_positions(t0_pose)
 
     uavs = [UAVState(uav_init[i], yaw=0.0) for i in range(NUM_UAVS)]
-    ugvs = [UGVState(ugv_init[i], yaw=0.0) for i in range(NUM_UGVS)]
+    ugvs = [UGVState(ugv_init[i], yaw=float(t0_pose[5])) for i in range(NUM_UGVS)]
 
     for uav in uavs:
         uav.u = np.array([UAV_MASS * G, 0.0, 0.0, 0.0])
@@ -159,7 +159,7 @@ def run_simulation(trajectory,
     uav_pos_3d_init = np.array([u.position for u in uavs])
     ugv_pos_2d_init = np.array([g.position for g in ugvs])
     robot_pos_init  = all_robot_positions_3d(uav_pos_3d_init, ugv_pos_2d_init)
-    ctop_init, cbot_init = platform_corners_world(t0_pose_ik)
+    ctop_init, cbot_init = platform_corners_world(t0_pose)
     corner_pos_init = all_corner_positions(ctop_init, cbot_init)
     tau_prev = solve_tensions(robot_pos_init, corner_pos_init,
                               platform_center=platform.position)
@@ -222,13 +222,18 @@ def run_simulation(trajectory,
         F_track  = ctrl_mass * ref_acc[:3] + PLAT_KP * pos_err + PLAT_KD * vel_err
         F_track[2] += ctrl_mass * G
 
-        # Yaw is left uncontrolled by the cables (rank deficiency), but is
-        # passively damped through the platform's aerodynamic drag model in
-        # platform_dynamics.continuous_dynamics.  We therefore command zero
-        # yaw torque from the QP — any non-zero command would corrupt the
-        # roll/pitch torque allocation since the QP weights all torque rows
-        # equally and the yaw row is unreachable.
-        tau_z_des = 0.0
+        # Yaw is now actively controlled through the cables thanks to
+        # the unsymmetric (rank-6) layout (see CABLE_SKEW_ANGLE_DEG).
+        # Closed-loop yaw stabilisation: PD on the yaw error plus the
+        # reference yaw acceleration as feedforward, scaled by I_zz.
+        psi_p   = plat_pose_actual[5]
+        r_body  = platform.x[11]
+        psi_err = np.arctan2(np.sin(ref_pose[5] - psi_p),
+                             np.cos(ref_pose[5] - psi_p))
+        dpsi_err = ref_vel[5] - r_body
+        tau_z_des = PLATFORM_IZZ * (
+            ref_acc[5] + PLAT_KP_YAW * psi_err + PLAT_KD_YAW * dpsi_err
+        )
 
         # Roll / pitch attitude stabilisation through the cables.
         # The platform is *free* to tilt (no artificial limits) \u2014 we just

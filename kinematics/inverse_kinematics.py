@@ -18,6 +18,7 @@ import numpy as np
 from config.parameters import (
     CORNERS_TOP_BODY, CORNERS_BOT_BODY,
     CABLE_OUTWARD_OFFSET, CABLE_VERTICAL_UAV,
+    CABLE_SKEW_ANGLE_DEG,
     PLATFORM_ZREF, NUM_UAVS, NUM_UGVS,
 )
 from dynamics.uav_dynamics import rotation_matrix
@@ -30,6 +31,27 @@ _OUTWARD_SIGNS = np.array([
     [ 1, -1],
 ], dtype=float)
 _OUTWARD_UNIT = _OUTWARD_SIGNS / np.linalg.norm(_OUTWARD_SIGNS[0])
+
+# Precompute the horizontal skew rotation matrix.  Applying this to the
+# outward unit vector tilts the cable into the tangential direction so
+# that each cable develops a non-zero yaw moment arm \u2014 lifting the
+# wrench-matrix rank from 5 to 6 (see CABLE_SKEW_ANGLE_DEG note in
+# config/parameters.py).
+#
+# IMPORTANT: the skew sign alternates across the 4 corners.  If every
+# corner were skewed the *same* way, all 4 tangential force components
+# would point in the same rotational sense and equal tensions would
+# produce a non-zero net yaw torque \u2014 i.e. a constant yaw-drift
+# disturbance.  By alternating the sign (+,-,+,-) the equilibrium with
+# uniform tension has zero yaw torque, while non-uniform tensions still
+# excite yaw (rank-6 wrench).
+_skew_rad = np.deg2rad(CABLE_SKEW_ANGLE_DEG)
+_SKEW_SIGNS = np.array([1.0, -1.0, 1.0, -1.0])
+_SKEW_R_LIST = [
+    np.array([[ np.cos(s*_skew_rad), -np.sin(s*_skew_rad)],
+              [ np.sin(s*_skew_rad),  np.cos(s*_skew_rad)]])
+    for s in _SKEW_SIGNS
+]
 
 
 def platform_corners_world(platform_pose: np.ndarray) -> tuple:
@@ -59,6 +81,11 @@ def compute_robot_targets(platform_pose: np.ndarray) -> tuple:
         norm = np.linalg.norm(out_world)
         if norm > 1e-8:
             out_world /= norm
+
+        # Apply horizontal skew so the offset has a tangential component.
+        # The sign alternates across corners so uniform tensions produce
+        # zero net yaw torque (see _SKEW_R_LIST note above).
+        out_world[:2] = _SKEW_R_LIST[i] @ out_world[:2]
 
         cx, cy = corners_top[i, 0], corners_top[i, 1]
         uav_x = cx + CABLE_OUTWARD_OFFSET * out_world[0]

@@ -101,10 +101,8 @@ def lpv_linearise(state: np.ndarray, ctrl: np.ndarray) -> tuple:
     A_c[11, 10] = ((UAV_IXX - UAV_IYY) / UAV_IZZ) * dphi
 
     dRz_dphi   = np.array([-cy*st*sp + sy*cp, -sy*st*sp - cy*cp, -ct*sp]) * (T / m)
-    dRz_dtheta = np.array([-cy*st,            -sy*st,              ct  ]) * (T / m)
-    dRz_dtheta = np.array([-cy*ct,  -sy*ct,  -st]) * (T / m)
-    dRz_dtheta = np.array([cy*ct*cp, sy*ct*cp, -st*cp]) * (T / m)
-    dRz_dpsi   = np.array([-sy*st*cp + cy*sp, cy*st*cp + sy*sp, 0.0]) * (T / m)
+    dRz_dtheta = np.array([cy*ct*cp,           sy*ct*cp,          -st*cp]) * (T / m)
+    dRz_dpsi   = np.array([-sy*st*cp + cy*sp,  cy*st*cp + sy*sp,  0.0   ]) * (T / m)
 
     A_c[3, 6] = dRz_dphi[0]
     A_c[3, 7] = dRz_dtheta[0]

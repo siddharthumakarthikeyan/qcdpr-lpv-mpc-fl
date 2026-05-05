@@ -25,12 +25,13 @@ from config.parameters import (
 )
 
 MU_REG         = 1e-2
-# Wrench tracking weights.  All six rows share the same weight; the cable
-# geometry is rank-5 (no yaw torque), so the QP automatically produces
-# zero yaw response without needing a special weight — it just minimises
-# the unattainable component in least-squares.
+# Wrench tracking weights.  All six rows of the wrench equation are
+# weighted equally; the rank-6 cable layout (CABLE_SKEW_ANGLE_DEG > 0
+# with alternating sign across corners) makes the yaw row reachable so
+# no special yaw weighting is required.
 WRENCH_W_FORCE  = 5e4
 WRENCH_W_TORQUE = 5e4
+WRENCH_W_YAW    = 5e4
 WRENCH_PENALTY = 5e4   # legacy alias
 RATE_PENALTY   = 50.0
 DELTA_TAU_MAX  = 8.0
@@ -66,8 +67,11 @@ class _TensionQPSolver:
             return None
 
         n = self.n
-        # Diagonal wrench weighting: forces and torques weighted equally.
-        Wt_diag = np.array([WRENCH_W_FORCE]*3 + [WRENCH_W_TORQUE]*3)
+        # Diagonal wrench weighting: forces, roll/pitch torques, and yaw
+        # torque can each have their own weight (yaw is up-weighted to
+        # compensate for the smaller cable moment arm in that direction).
+        Wt_diag = np.array([WRENCH_W_FORCE]*3
+                           + [WRENCH_W_TORQUE, WRENCH_W_TORQUE, WRENCH_W_YAW])
         Wt_W    = W.T @ (Wt_diag[:, None] * W)
 
         P = (1.0 + 2.0 * RATE_PENALTY) * np.eye(n) + 2.0 * Wt_W

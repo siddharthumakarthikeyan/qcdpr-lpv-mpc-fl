@@ -71,6 +71,25 @@ CABLE_VERTICAL_UAV   = (PLATFORM_ZREF + _hz + 0.95)
 CABLE_MIN_TENSION    = 0.50
 CABLE_MAX_TENSION    = 50.0
 
+# ---------------------------------------------------------------------------
+# Cable skew angle (azimuthal tilt of the cable anchor offset).
+#
+# With CABLE_SKEW_ANGLE_DEG = 0 the radial offset places each robot
+# directly outward from its platform corner; the resulting wrench
+# matrix W in R^{6x8} has rank 5 because every cable's horizontal force
+# is collinear with the corner's position vector (zero yaw moment arm).
+#
+# We use a non-zero skew with sign alternating across the 4 corners
+# (+,-,+,-) inside kinematics/inverse_kinematics.py.  This:
+#   1. lifts the rank of W to 6 (yaw becomes actively controllable
+#      through the cables), and
+#   2. keeps zero net yaw torque at uniform tensions (no drift bias).
+# Together these eliminate the previous "yaw makeup" (forcing psi_ref=0
+# in the IK frame and stabilising yaw with artificial aerodynamic drag
+# on the platform) and let the controller track the reference yaw
+# directly through the physical cable wrench.
+CABLE_SKEW_ANGLE_DEG = 8.0
+
 NUM_CABLES  = 8
 
 DT      = 0.05
@@ -98,13 +117,20 @@ UGV_P_MPC = np.diag([0.005, 0.02])
 
 PLAT_KP = np.array([240.0, 240.0, 400.0])
 PLAT_KD = np.array([85.0,  85.0,  110.0])
-PLAT_KP_YAW = 12.0
-PLAT_KD_YAW = 6.0
-# Roll/pitch attitude stabilisation through cables. Critically damped at
-# omega_n ~ 7 rad/s.  These shape only the desired wrench fed to the
-# tension QP; the platform itself integrates freely.
+# Yaw closed-loop stabilisation through the cables (rank-6 layout, see
+# CABLE_SKEW_ANGLE_DEG).  The cable yaw moment arm is small (set by
+# sin(skew_angle)), so the achievable yaw-torque slew is limited by the
+# DELTA_TAU_MAX rate constraint inside the tension QP.  We keep
+# omega_n ~ 1.6 rad/s and zeta ~ 1.4 to stay safely inside that
+# actuator bandwidth.
+PLAT_KP_YAW = 2.5
+PLAT_KD_YAW = 4.5
+# Roll/pitch attitude stabilisation through cables.  Without aerodynamic
+# drag the cables are the sole source of damping; gains are chosen for
+# omega_n ~ 7 rad/s with zeta ~ 1.3 to suppress the slow tilt mode that
+# is otherwise excited by trajectories with non-zero yaw rate.
 PLAT_KP_RP = 50.0
-PLAT_KD_RP = 14.0
+PLAT_KD_RP = 18.0
 
 FL_KP = np.array([15.0, 15.0, 25.0])
 FL_KD = np.array([10.0, 10.0, 12.0])
