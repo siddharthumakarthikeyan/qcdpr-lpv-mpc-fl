@@ -14,6 +14,7 @@ Copyright (C) 2025 Siddharth U and Badri Narayanan R,
 SASTRA Deemed to be University, Thanjavur, India.
 All rights reserved. Released for academic research use only.
 """
+from __future__ import annotations
 import numpy as np
 from scipy.optimize import minimize
 from config.parameters import UGV_HORIZON, UGV_MAX_VEL, UGV_MAX_ANG_VEL, DT
