@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Real-Time LPV-MPC with Feedback Linearisation for a Quadrotor-Based Reconfigurable Cable-Driven Parallel Robot</title>
+<meta name="description" content="Four quadrotors and four ground vehicles carry a platform on eight cables, controlled by an FL / LPV-MPC cascade with a rate-limited tension QP and an online EKF.">
+<link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro&display=swap" rel="stylesheet">
+<style>
+/* Project page in the style of the Nerfies academic template (nerfies.github.io), rebuilt without external CSS. */
+*{box-sizing:border-box;min-width:0}
+html{scroll-padding-top:20px}
+body{margin:0;background:#fff;color:#4a4a4a;font:16px/1.5 "Noto Sans",sans-serif;overflow-x:clip}
+a{color:#3273dc;text-decoration:none}a:hover{color:#363636}
+img{max-width:100%;height:auto;display:block}
+.container{max-width:960px;margin:0 auto;padding:0 24px}
+.narrow{max-width:800px;margin:0 auto}
+.hero{padding:3rem 0 1.5rem;text-align:center}
+.publication-title{font-family:"Google Sans",sans-serif;font-size:3rem;line-height:1.125;color:#363636;font-weight:400;margin:0 0 1.5rem}
+.publication-authors{font-family:"Google Sans",sans-serif;font-size:1.25rem;color:#4a4a4a;margin:0 0 .3rem}
+.publication-affil{font-family:"Google Sans",sans-serif;font-size:1.1rem;color:#4a4a4a;margin:0 0 .3rem}
+.publication-venue{font-family:"Google Sans",sans-serif;font-size:1.1rem;color:#4a4a4a;margin:.3rem 0 1rem}
+.links{display:flex;flex-wrap:wrap;justify-content:center;gap:.5rem;margin:1.2rem 0 0}
+.button{display:inline-flex;align-items:center;gap:.5em;height:2.5em;padding:0 1.2em;border-radius:290486px;background:#363636;color:#fff;
+  font:400 1rem "Noto Sans",sans-serif;border:0;cursor:pointer}
+.button:hover{background:#2f2f2f;color:#fff}
+.button:focus-visible{outline:3px solid #3273dc;outline-offset:2px}
+.button svg{width:1.05em;height:1.05em;fill:currentColor;flex:none}
+.teaser{padding:0 0 2rem}
+.teaser img{width:100%;border-radius:0}
+.teaser .subtitle{font-family:"Google Sans",sans-serif;font-size:1.25rem;color:#4a4a4a;text-align:center;margin:1rem auto 0;max-width:820px}
+section.section{padding:2.5rem 0}
+section.light{background:#f5f5f5}
+h2.title{font-family:"Google Sans",sans-serif;font-size:2rem;font-weight:600;color:#363636;text-align:center;margin:0 0 1.5rem;line-height:1.125}
+h3.title{font-family:"Google Sans",sans-serif;font-size:1.5rem;font-weight:600;color:#363636;margin:2rem 0 1rem;line-height:1.125}
+.content p{text-align:justify;margin:0 0 1em}
+.content ul{margin:0 0 1em;padding-left:1.5em}.content li{margin:.35em 0}
+.content b{color:#363636}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.5rem}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1.25rem}
+figure{margin:0}
+figcaption{font-size:.95rem;color:#4a4a4a;margin-top:.6rem;text-align:center}
+.full{margin:1.5rem 0}
+.full figcaption{text-align:justify}
+table{width:100%;border-collapse:collapse;font-size:.95rem;margin:1rem 0}
+th,td{padding:.5em .75em;border-bottom:1px solid #dbdbdb;text-align:left;vertical-align:top}
+th{color:#363636;font-weight:600;border-bottom-width:2px}
+.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.scroll{overflow-x:auto}
+.bibwrap{position:relative}
+pre{background:#fff;border:1px solid #dbdbdb;color:#4a4a4a;padding:1.25rem 1.5rem;overflow-x:auto;font:.875rem/1.5 monospace;margin:0;border-radius:4px}
+.copy{position:absolute;top:.6rem;right:.6rem;height:2em;font-size:.85rem}
+footer{padding:3rem 0 4rem;font-size:.9rem;color:#4a4a4a;text-align:center}
+footer p{margin:.4rem auto;max-width:720px}
+@media(max-width:768px){.publication-title{font-size:2rem}.grid3{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.grid2,.grid3{grid-template-columns:minmax(0,1fr)}.publication-authors{font-size:1.1rem}table{font-size:.85rem}th,td{padding:.45em .4em}}
+
+.flow{display:flex;flex-direction:column;align-items:center;gap:0;margin:0 auto;max-width:760px}
+.flow .row{display:flex;flex-wrap:wrap;justify-content:center;gap:.75rem;width:100%}
+.flow .box{flex:1 1 0;min-width:150px;max-width:260px;border:1px solid #dbdbdb;border-radius:6px;padding:.7rem .9rem;background:#fff;text-align:center}
+.flow .box b{display:block;font-family:"Google Sans",sans-serif;color:#363636;font-size:1rem;font-weight:600}
+.flow .box span{display:block;font-size:.85rem;color:#4a4a4a;margin-top:.2rem}
+.flow .box.key{border-color:#363636;border-width:2px}
+.flow .arrow{width:2px;height:22px;background:#b5b5b5;position:relative;margin:.3rem 0}
+.flow .arrow::after{content:"";position:absolute;bottom:-5px;left:-4px;border:5px solid transparent;border-top:6px solid #b5b5b5}
+.teaser .flowwrap{background:#fafafa;border:1px solid #eee;border-radius:6px;padding:1.75rem 1rem}
+.fsm{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:.4rem;font-family:"Google Sans",sans-serif;margin:1rem 0}
+.fsm span{border:1px solid #dbdbdb;border-radius:999px;padding:.3em .9em;background:#fff;color:#363636;font-size:.9rem}
+.fsm i{color:#b5b5b5;font-style:normal}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem;margin:1.5rem 0}
+.stats div{text-align:center;border:1px solid #eee;border-radius:6px;padding:1rem .5rem}
+.stats b{display:block;font-family:"Google Sans",sans-serif;font-size:1.8rem;color:#363636;font-weight:400;line-height:1.1}
+.stats span{font-size:.85rem;color:#4a4a4a}
+.credit{border-left:3px solid #363636;background:#f5f5f5;padding:1rem 1.25rem;margin:0 0 1.5rem;border-radius:0 4px 4px 0}
+.credit p{margin:0;text-align:left}
+code{font-family:monospace;font-size:.9em;background:#f5f5f5;padding:.1em .35em;border-radius:3px;overflow-wrap:anywhere}
+pre code{background:none;padding:0}
+.cmd{margin:.5rem 0 1rem}
+@media(max-width:560px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.flow .box{max-width:none}}
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <div class="container narrow">
+    <h1 class="publication-title">Real-Time LPV-MPC with Feedback Linearisation for a Quadrotor-Based Reconfigurable Cable-Driven Parallel Robot</h1>
+    <p class="publication-authors"><a href="https://github.com/siddharthumakarthikeyan">Siddharth Umakarthikeyan</a>, Badri Narayanan R</p>
+    <p class="publication-affil">SASTRA Deemed to be University, India</p>
+    <p class="publication-venue">Research code · 2025</p>
+    <div class="links"><a class="button" href="https://github.com/siddharthumakarthikeyan/qcdpr-lpv-mpc-fl"><svg viewBox="0 0 496 512"><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8z"/></svg>Code</a><a class="button" href="#BibTeX"><svg viewBox="0 0 512 512"><path d="M464 32H336c-26.5 0-48 21.5-48 48v128c0 26.5 21.5 48 48 48h80v64c0 35.3-28.7 64-64 64h-8c-13.3 0-24 10.7-24 24v48c0 13.3 10.7 24 24 24h8c88.4 0 160-71.6 160-160V80c0-26.5-21.5-48-48-48zm-288 0H48C21.5 32 0 53.5 0 80v128c0 26.5 21.5 48 48 48h80v64c0 35.3-28.7 64-64 64h-8c-13.3 0-24 10.7-24 24v48c0 13.3 10.7 24 24 24h8c88.4 0 160-71.6 160-160V80c0-26.5-21.5-48-48-48z"/></svg>BibTeX</a></div>
+  </div>
+</section>
+
+<section class="teaser">
+  <div class="container">
+    <img src="media/qcdpm-isaac-sim.jpg" width="1280" height="536" alt="Quadrotors and ground robots painting an aircraft wing with a cable-suspended platform, rendered in NVIDIA Isaac Sim">
+    <p class="subtitle"><b>QCDPR-LPV-MPC-FL</b>: a feedback-linearisation and LPV-MPC cascade, a rate-limited tension QP and an online EKF control four quadrotors and four ground vehicles that carry one platform on eight cables. Render of the same system in NVIDIA Isaac Sim.</p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container narrow">
+    <h2 class="title">Abstract</h2>
+    <div class="content">
+<p>We present a real-time control framework for a Quadrotor-based reconfigurable Cable-Driven Parallel Robot (QCDPR): four quadrotors and four differential-drive ground vehicles cooperatively suspend and manoeuvre a rigid end-effector platform through eight cables. The controller is a cascade of Feedback Linearisation (FL) and Linear Parameter Varying Model Predictive Control (LPV-MPC). An FL position loop generates thrust and attitude references for each quadrotor; a quasi-LPV attitude MPC re-linearises the quadrotor dynamics at every step; each ground vehicle runs a nonlinear MPC on formation targets obtained from the platform inverse kinematics; and a rate-limited quadratic programme distributes the eight cable tensions to realise the desired platform wrench.</p>
+<p>Cable forces are fed back into every UAV and UGV model, the platform wrench is computed from the actual anchor forces, and a small alternating azimuthal skew of the anchors makes the 6×8 wrench matrix full row rank, so yaw is controlled through the cables themselves. An Extended Kalman Filter estimates the platform mass and external disturbance online. All MPC problems are solved as condensed QPs with direct OSQP calls. The system tracks quadrilateral, circular and sinusoidal paths with millimetre-level error and recovers from a 2 kg payload step, with the mass estimate converging within 1.0 s.</p>
+</div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container narrow">
+    <h2 class="title">Method</h2>
+    <div class="flowwrap" style="margin:0 0 1.5rem"><div class="flow"><div class="row"><div class="box"><b>Reference trajectory</b><span>quadrilateral, circular, sinusoidal</span></div></div><div class="arrow"></div><div class="row"><div class="box key"><b>Inverse kinematics</b><span>platform pose → 4 UAV + 4 UGV targets</span></div></div><div class="arrow"></div><div class="row"><div class="box"><b>FL position loop</b><span>per UAV: thrust, φ_d, θ_d</span></div><div class="box key"><b>LPV-MPC attitude</b><span>per UAV, re-linearised each step</span></div><div class="box"><b>NL-MPC</b><span>per UGV: velocity commands</span></div></div><div class="arrow"></div><div class="row"><div class="box key"><b>Tension QP</b><span>rate-limited OSQP, 8 cables, full wrench</span></div></div><div class="arrow"></div><div class="row"><div class="box"><b>Coupled dynamics</b><span>UAVs, UGVs and platform, RK4</span></div><div class="box"><b>EKF</b><span>online mass and disturbance</span></div></div></div></div><div class="content"><ul>
+<li><b>Outer loop: feedback linearisation.</b> A feedback-linearising position controller turns the desired UAV acceleration into thrust and roll and pitch references, with the measured cable force as feed-forward (<code>a_eff = a_cmd − F_cable / m_uav</code>).</li>
+<li><b>Inner loop: quasi-LPV attitude MPC.</b> The quadrotor rotational dynamics are re-linearised at the current state each control step and tracked by an MPC over a 10-step horizon.</li>
+<li><b>Ground vehicles: nonlinear MPC.</b> Each differential-drive UGV tracks its formation position from the end-effector inverse kinematics over a 15-step horizon, with bidirectional velocity bounds so it can resist a cable pull while stationary.</li>
+<li><b>Tension distribution.</b> A rate-limited QP allocates the eight tensions to meet the full platform wrench at every cycle, with a Newton fallback. Desired roll, pitch and yaw torques come from PD laws on the platform, so attitude is held by the cables alone; the platform has no aerodynamic damping.</li>
+<li><b>Rank-6 cable layout.</b> An 8° alternating azimuthal skew of the anchors makes <code>W ∈ ℝ<sup>6×8</sup></code> full row rank, giving active yaw through the cables with zero net yaw torque under uniform tension.</li>
+<li><b>Adaptive estimation.</b> An EKF estimates the effective platform mass and an AR(1) disturbance online, and feeds both to the controller.</li>
+<li><b>Solver.</b> Every MPC is written as a condensed, input-only QP and solved by direct OSQP calls, without a modelling layer.</li>
+</ul></div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <h2 class="title">Results</h2>
+    <div class="content narrow">
+      <h3 class="title">Trajectory tracking with full cable-tension coupling</h3>
+      <div class="scroll"><table><thead><tr><th>Trajectory</th><th class="n">X MAE</th><th class="n">Y MAE</th><th class="n">Z MAE</th><th class="n">Attitude</th></tr></thead><tbody><tr><td>Quadrilateral</td><td class="n">1.93 mm</td><td class="n">1.92 mm</td><td class="n">0.00 mm</td><td class="n">|att| &lt; 0.02°</td></tr><tr><td>Circular</td><td class="n">2.87 mm</td><td class="n">2.87 mm</td><td class="n">0.00 mm</td><td class="n">|att| &lt; 0.5°</td></tr><tr><td>Sinusoidal</td><td class="n">2.39 mm</td><td class="n">7.65 mm</td><td class="n">0.00 mm</td><td class="n">|φ| ≤ 4.49°, |θ| ≤ 2.98°</td></tr></tbody></table></div>
+    </div>
+    <div class="grid2" style="margin-top:1.5rem">
+      <figure class=""><img src="media/all_trajectories_3d.png" width="1301" height="1333" alt="All three reference and actual platform paths" loading="lazy"><figcaption><b>Platform paths.</b> Quadrilateral, circular and sinusoidal references with the tracked platform position.</figcaption></figure>
+      <figure class=""><img src="media/circular_uav_tracking.png" width="1784" height="1328" alt="UAV tracking against IK targets" loading="lazy"><figcaption><b>UAV tracking.</b> Quadrotor positions against their inverse-kinematics targets on the circular path.</figcaption></figure>
+    </div>
+    <figure class="full"><img src="media/circular_tensions.png" width="1784" height="1181" alt="Cable tensions over time" loading="lazy"><figcaption><b>Cable tensions.</b> UAV and UGV cable tensions on the circular path stay positive and settle after the transient.</figcaption></figure>
+    <div class="content narrow">
+      <h3 class="title">Adaptive payload change: EKF ablation</h3>
+      <div class="scroll"><table><thead><tr><th>Case (quadrilateral, +2 kg at t = 30 s)</th><th class="n">X MAE</th><th class="n">Y MAE</th><th class="n">Z MAE</th></tr></thead><tbody><tr><td>A: no adaptation</td><td class="n">2.0 mm</td><td class="n">2.0 mm</td><td class="n">45.7 mm</td></tr><tr><td>B: mass estimation only</td><td class="n">2.0 mm</td><td class="n">2.0 mm</td><td class="n">0.3 mm</td></tr><tr><td>C: full EKF (mass and disturbance)</td><td class="n">2.0 mm</td><td class="n">2.0 mm</td><td class="n">0.3 mm</td></tr></tbody></table></div>
+      <p>After a +2 kg payload step the EKF converges to within ±5% of the true mass in 1.0 s, with a steady-state mass error of 0.002 kg. Across the three trajectories, adaptation reduces mean tracking error by 82–91% against the non-adaptive baseline.</p>
+    </div>
+    <div class="grid2">
+      <figure class=""><img src="media/quadrilateral_ekf_ablation.png" width="1784" height="731" alt="EKF ablation error plot" loading="lazy"><figcaption><b>Ablation.</b> Without adaptation the vertical error jumps to about 65 mm after the payload step; with mass estimation it returns to the millimetre level.</figcaption></figure>
+      <figure class=""><img src="media/circular_ekf_mass.png" width="1484" height="581" alt="EKF mass estimate against true mass" loading="lazy"><figcaption><b>Online mass estimate.</b> The EKF tracks the 3 kg to 5 kg platform mass change.</figcaption></figure>
+    </div>
+    <div class="grid2" style="margin-top:1.5rem">
+      <figure class=""><img src="media/circular_iter.png" width="1484" height="581" alt="Computation time per control step" loading="lazy"><figcaption><b>Real-time budget.</b> Full control step: 13.8 ms mean against a 50 ms budget. Each condensed MPC solve averages about 2 ms.</figcaption></figure>
+      <figure class=""><img src="media/tension_vs_mass.png" width="1184" height="731" alt="Static cable tension against payload mass" loading="lazy"><figcaption><b>Load sharing.</b> Static UAV cable tension grows linearly with payload mass while the UGV cables stay lightly loaded.</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container narrow">
+    <h2 class="title">Reproduce</h2>
+    <div class="content">
+<p>Python 3.10 or later with <code>numpy</code>, <code>scipy</code>, <code>matplotlib</code> and <code>osqp</code>. All results in this page are produced by one command (about 7 minutes on a laptop):</p>
+<pre class="cmd"><code>pip install -r requirements.txt
+python generate_all_results.py --no-video</code></pre>
+<p>Single runs, adaptive mode and the ablation study:</p>
+<pre class="cmd"><code>python main.py circular
+python main.py quadrilateral --adaptive --scenario payload_change
+python main.py quadrilateral --ablation --scenario payload_change
+python main.py circular --monitor</code></pre>
+</div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container narrow">
+    <h2 class="title">Related Work</h2>
+    <div class="content"><ul>
+<li><a href="https://siddharthumakarthikeyan.github.io/QCDPM-Isaac-Sim/">Quadrotor-Based Mobile Cable-Driven Parallel Manipulator</a>: the same class of machine in NVIDIA Isaac Sim with PhysX cable and winch dynamics.</li>
+<li><a href="https://siddharthumakarthikeyan.github.io/cdpm-dynamics/">Coupled Dynamics of a Quadrotor-Based Cable-Driven Manipulator</a>: the MATLAB/Simulink model of the eight-robot system.</li>
+</ul></div>
+  </div>
+</section>
+
+<section class="section light" id="BibTeX">
+  <div class="container narrow">
+    <h2 class="title" style="text-align:left">BibTeX</h2>
+    <div class="bibwrap">
+      <button class="button copy" id="copyBib" type="button">Copy</button>
+<pre id="bibtex">@misc{umakarthikeyan2025qcdprlpvmpc,
+  title  = {Real-Time Control of a Quadrotor-based Reconfigurable
+            Cable-Driven Parallel Robot with LPV-MPC-FL},
+  author = {Umakarthikeyan, Siddharth and Narayanan R, Badri},
+  year   = {2025},
+  note   = {SASTRA Deemed to be University. Code: https://github.com/siddharthumakarthikeyan/qcdpr-lpv-mpc-fl}
+}</pre>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <p>Code © 2025 Siddharth Umakarthikeyan and Badri Narayanan R, SASTRA Deemed to be University. Released for academic research use only; see the <a href="https://github.com/siddharthumakarthikeyan/qcdpr-lpv-mpc-fl">repository</a>.</p>
+    <p>This page is licensed under a <a href="https://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>. Website design adapted from the <a href="https://nerfies.github.io/">Nerfies</a> project page template.</p>
+  </div>
+</footer>
+
+<script>
+{
+  const btn = document.getElementById('copyBib');
+  btn.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(document.getElementById('bibtex').textContent); btn.textContent = 'Copied'; }
+    catch (e) { btn.textContent = 'Select to copy'; }
+    setTimeout(() => { btn.textContent = 'Copy'; }, 1800);
+  });
+}
+</script>
+</body>
+</html>
